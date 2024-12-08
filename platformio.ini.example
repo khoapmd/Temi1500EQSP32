@@ -1,0 +1,32 @@
+; PlatformIO Project Configuration File
+;
+;   Build options: build flags, source filter
+;   Upload options: custom upload port, speed and extra flags
+;   Library options: dependencies, extra library storages
+;   Advanced options: extra scripting
+;
+; Please visit documentation for the other options and examples
+; https://docs.platformio.org/page/projectconf.html
+
+[env:esp32doit-devkit-v1]
+platform = espressif32
+board = esp32doit-devkit-v1
+framework = arduino
+monitor_speed = 115200
+lib_deps = 
+	256dpi/MQTT@^2.5.2
+build_flags = 
+	'-DAPPVERSION="1.0.0"'
+	'-DAPPUPDNAME="temi1500ESP32"'
+	'-DAPPENCKEY="your-encrypt-key"'
+	'-DAPPDEVTYPE="device-name"'
+	'-DAPPAPIKEY="your-api-key"'
+	'-DAPPAPI="http://example.com/api"'
+	'-DAPPSSID="your-ssid"'
+	'-DAPPPASSWORD="ssid-password"'
+	'-DAPPPMQTTSERVER="broker-address"'
+	'-DAPPPMQTTUSER="mqtt-user"'
+	'-DAPPPMQTTPASSWORD="mqtt-password"'
+	'-DAPPPMQTTDATATOPIC="/ESPChamber"'
+	'-DAPPPMQTTSTSTOPIC="/ConnectStatus"'
+	'-DAPPPMQTTCMDTOPIC="/ESP32ChamberCMD"'
