@@ -1,7 +1,7 @@
 #include "DebugSerial.h"
 
 // Define the static member in the implementation file
-bool DebugSerial::debugEnabled = false;
+bool DebugSerial::debugEnabled = true;
 
 // Set debug mode
 void DebugSerial::setDebug(bool debug) {
