@@ -76,28 +76,28 @@ void processModbusResponse() {
         // Validate CRC
         uint16_t crc = calculateCRC(response, responseLength - 2);
         if (crc == (response[responseLength - 1] << 8) | response[responseLength - 2]) {
-            Serial.println("CRC Validated Successfully");
+            DebugSerial::println("CRC Validated Successfully");
 
             // Extract register values
             uint8_t dataBytesLength = response[2]; // Byte count (third byte in response)
             uint8_t dataBytes[dataBytesLength];
             memcpy(dataBytes, &response[3], dataBytesLength); // Copy data bytes (skip slave address, function code, byte count, and CRC)
 
-            Serial.print("Register Values: ");
+            DebugSerial::print("Register Values: ");
             for (uint8_t i = 0; i < dataBytesLength; i += 2) {
                 uint16_t value = (dataBytes[i] << 8) | dataBytes[i + 1]; // Combine high and low bytes
                 if (i < dataBytesLength - 2) {
                     value = unsignedToSignedFloat(value); // Convert D1 to D9 to signed float
                 }
-                Serial.print(value);
-                Serial.print(" ");
+                DebugSerial::print(value);
+                DebugSerial::print(" ");
             }
-            Serial.println();
+            DebugSerial::println("");
         } else {
-            Serial.println("CRC Validation Failed");
+            DebugSerial::println("CRC Validation Failed");
         }
     } else {
-        Serial.println("No Response Received");
+        DebugSerial::println("No Response Received");
     }
 }
 
@@ -129,7 +129,7 @@ void checkFirmwareTask(void *pvParameters) {
     while (1) {
         if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
             if (WiFi.status() == WL_CONNECTED && WiFi.localIP().toString() != "0.0.0.0") {
-                Serial.println("Checking for firmware updates...");
+                DebugSerial::println("Checking for firmware updates...");
                 OTACheck(true); // Call OTAHelper function to check for updates
             }
             xSemaphoreGive(xSemaphore); // Release the semaphore
