@@ -1,43 +1,147 @@
-#define MIN_TEMP_PV -80.0
-#define MAX_TEMP_PV 160.0
-#define MIN_TEMP_SP -80.0
-#define MAX_TEMP_SP 160.0
-#define MIN_HUMI_PV 0.0
-#define MAX_HUMI_PV 100.0
-
-#include <esp_task_wdt.h>
-#include "main.h"
-#include "mqttHelper.h"
-#include "OTAHelper.h"
-#include "infoHelper.h"
+#include <Arduino.h>
 #include "EQSP32.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <esp_task_wdt.h>
+#include "OTAHelper.h" // Include OTAHelper for firmware updates
+#include "infoHelper.h"
+#include "mqttHelper.h"
 #include "debugSerial.h"
 
+// Define RS-485 pins and baud rate
+#define BAUD_RATE 115200
+
+// EQSP32 instance
 EQSP32 eqsp32;
 char boardID[23];
-// Ticker tickerFirmware(checkFirmware, 1800003, 0, MILLIS); // 30 minutes
-const char *command = ":01030000000AF2\r\n"; // Get D0001 to D0010;
-ChamberData chamberData;
-bool newVersionChecked = false;
-int retryCount = 0; // Counter for command sending retries
-const int maxRetries = 3; // Maximum number of wrong data retries before taking action
-const int maxEchoRetries = 300; // Maximum number of echo retries before taking action
-int echoRetryCount = 0; // Counter for echo retries
+
+// Semaphore for thread-safe access to shared resources
 SemaphoreHandle_t xSemaphore = NULL;
 
-void getDataTask(void *pvParameters);
-void checkFirmwareTask(void *pvParameters);
+// Function to calculate CRC for Modbus RTU
+uint16_t calculateCRC(const uint8_t *data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x0001) {
+                crc >>= 1;
+                crc ^= 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    return crc;
+}
 
-void setup()
-{
-    Serial.begin(115200); // Initialize Serial Monitor for debugging
-    // uart_setup(UART_NUM_2, 115200, UART_DATA_7_BITS); //HardwareSerial does not support 7bit data in Arduino Framework, config in ESP-IDF Framework 
-    // DebugSerial::println("UART2 configured for 7 data bits.");
+// Function to send Modbus RTU request
+void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, uint16_t regQuantity) {
+    // Prepare the request message
+    uint8_t request[8];
+    request[0] = slaveAddr;                     // Slave address
+    request[1] = functionCode;                  // Function code (0x03 for Read Holding Registers)
+    request[2] = (startAddr >> 8) & 0xFF;       // High byte of start address
+    request[3] = startAddr & 0xFF;              // Low byte of start address
+    request[4] = (regQuantity >> 8) & 0xFF;     // High byte of register count
+    request[5] = regQuantity & 0xFF;            // Low byte of register count
 
-    snprintf(boardID, 23, "%llX", ESP.getEfuseMac()); //Get unique ESP MAC
+    // Calculate CRC
+    uint16_t crc = calculateCRC(request, 6);
+    request[6] = crc & 0xFF;                    // Low byte of CRC
+    request[7] = (crc >> 8) & 0xFF;             // High byte of CRC
+
+    // Send the request
+    digitalWrite(eqsp32.getPin(EQ_RS485_EN), HIGH);       // Enable transmitter
+    eqsp32.Serial.write(request, 8);            // Write the request to UART
+    delay(10);                                  // Small delay
+    digitalWrite(eqsp32.getPin(EQ_RS485_EN), LOW);        // Disable transmitter
+}
+
+// Function to convert unsigned integer to signed float
+float unsignedToSignedFloat(uint16_t value) {
+    if (value > 32767) {                        // Check if the value is greater than the maximum positive signed 16-bit value
+        value -= 65536;                         // Convert to negative signed value
+    }
+    return static_cast<float>(value) / 10.0;   // Convert to float and divide by 10 (assuming scaling factor)
+}
+
+// Function to process Modbus response
+void processModbusResponse() {
+    if (eqsp32.Serial.available()) {
+        uint8_t response[256];
+        size_t responseLength = eqsp32.Serial.readBytes(response, 256);
+
+        // Validate CRC
+        uint16_t crc = calculateCRC(response, responseLength - 2);
+        if (crc == (response[responseLength - 1] << 8) | response[responseLength - 2]) {
+            Serial.println("CRC Validated Successfully");
+
+            // Extract register values
+            uint8_t dataBytesLength = response[2]; // Byte count (third byte in response)
+            uint8_t dataBytes[dataBytesLength];
+            memcpy(dataBytes, &response[3], dataBytesLength); // Copy data bytes (skip slave address, function code, byte count, and CRC)
+
+            Serial.print("Register Values: ");
+            for (uint8_t i = 0; i < dataBytesLength; i += 2) {
+                uint16_t value = (dataBytes[i] << 8) | dataBytes[i + 1]; // Combine high and low bytes
+                if (i < dataBytesLength - 2) {
+                    value = unsignedToSignedFloat(value); // Convert D1 to D9 to signed float
+                }
+                Serial.print(value);
+                Serial.print(" ");
+            }
+            Serial.println();
+        } else {
+            Serial.println("CRC Validation Failed");
+        }
+    } else {
+        Serial.println("No Response Received");
+    }
+}
+
+// Task to handle Modbus communication
+void modbusTask(void *pvParameters) {
+    while (1) {
+        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
+            // Example: Read Holding Registers from D1 to D10 (Register Address 0 to 9)
+            uint8_t slaveAddr = 1;       // Slave address
+            uint8_t functionCode = 0x03; // Function code for Read Holding Registers
+            uint16_t startAddr = 0;      // Start address of the holding register (D1 = 0, D2 = 1, ..., D10 = 9)
+            uint16_t regQuantity = 10;   // Number of registers to read (D1 to D10)
+
+            // Send Modbus request
+            modbusRequest(slaveAddr, functionCode, startAddr, regQuantity);
+
+            // Wait for response
+            delay(200); // Wait for response
+            processModbusResponse();
+
+            xSemaphoreGive(xSemaphore); // Release the semaphore
+        }
+        vTaskDelay(pdMS_TO_TICKS(10000)); // Delay for 10 seconds before the next request
+    }
+}
+
+// Task to check for firmware updates
+void checkFirmwareTask(void *pvParameters) {
+    while (1) {
+        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
+            if (WiFi.status() == WL_CONNECTED && WiFi.localIP().toString() != "0.0.0.0") {
+                Serial.println("Checking for firmware updates...");
+                OTACheck(true); // Call OTAHelper function to check for updates
+            }
+            xSemaphoreGive(xSemaphore); // Release the semaphore
+        }
+        vTaskDelay(pdMS_TO_TICKS(300000)); // Delay for 300 seconds (5 minutes)
+    }
+}
+
+void setup() {
+    // Initialize Serial Monitor for debugging
+    Serial.begin(115200);
+
     // Initialize EQSP32
     EQSP32Configs configs;       
     configs.userDevName = boardID;
@@ -45,8 +149,16 @@ void setup()
     configs.wifiPassword = APPPASSWORD;
     eqsp32.begin(configs, false);
 
-    eqsp32.configSerial(RS485_TX, 115200); // Configure RS485 for 115200 baud
-    
+    // Configure RS-485 pins
+    pinMode(eqsp32.getPin(EQ_RS485_TX), OUTPUT);    // TX pin as output
+    pinMode(eqsp32.getPin(EQ_RS485_RX), INPUT);     // RX pin as input
+    pinMode(eqsp32.getPin(EQ_RS485_EN), OUTPUT);    // RS485 Enable pin as output
+    digitalWrite(eqsp32.getPin(EQ_RS485_EN), LOW); // Default to receive mode
+
+    // Configure UART for RS-485
+    eqsp32.configSerial(RS485_TX, BAUD_RATE);
+    eqsp32.configSerial(RS485_RX, BAUD_RATE);
+
     //Wifi controls
     WiFi.onEvent(WiFiStationConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
     WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
@@ -63,12 +175,11 @@ void setup()
     }
 
     // Create tasks
-    xTaskCreate(getDataTask, "getDataTask", 4096, NULL, 1, NULL);
-    xTaskCreate(checkFirmwareTask, "checkFirmwareTask", 4096, NULL, 1, NULL);
+    xTaskCreate(modbusTask, "ModbusTask", 4096, NULL, 1, NULL);
+    xTaskCreate(checkFirmwareTask, "CheckFirmwareTask", 4096, NULL, 1, NULL);
 }
 
-void loop()
-{
+void loop() {
     mqttLoop();
     yield(); //prevent crash
 }
@@ -98,111 +209,6 @@ void stopWatchDog()
     esp_task_wdt_deinit();
 }
 
-String readResponse(unsigned long timeout) {
-    String response = "";
-    unsigned long startTime = millis();
-
-    while (millis() - startTime < timeout) {
-        while (eqsp32.Serial.available()) {
-            char byteChar = eqsp32.Serial.read();
-            response += byteChar;
-        }
-    }
-
-    return response.length() > 0 ? response : "Timeout";
-}
-
-void getDataTask(void *pvParameters) {
-    while (1) {
-        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
-            // Example: Sending a MODBUS RTU request to read D-Registers from D0000 to D0009 (10 registers)
-            String hexCommand = "01030000000A700D"; // MODBUS RTU request to read D0000 to D0009
-            eqsp32.Serial.write(hexCommand.c_str());
-
-            // Example: Receive data over RS485 with a timeout
-            String receivedData = readResponse(10); // 100ms timeout]
-
-            if (receivedData != "Timeout" && receivedData != hexCommand) {
-                DebugSerial::println("Received: " + receivedData);
-                // Process the received data
-                if (receivedData.length() >= 21) { // 1 byte for slave address, 1 byte for function code, 1 byte for byte count, 20 bytes for data (10 registers * 2 bytes each)
-                    int byteCount = strtol(receivedData.substring(2, 4).c_str(), NULL, 16);
-                    if (byteCount == 20) {
-                        chamberData.tempPV = (float)strtol(receivedData.substring(4, 8).c_str(), NULL, 16);
-                        chamberData.tempSP = (float)strtol(receivedData.substring(8, 12).c_str(), NULL, 16);
-                        chamberData.wetPV = (float)strtol(receivedData.substring(12, 16).c_str(), NULL, 16);
-                        chamberData.wetSP = (float)strtol(receivedData.substring(16, 20).c_str(), NULL, 16);
-                        chamberData.humiPV = (float)strtol(receivedData.substring(20, 24).c_str(), NULL, 16);
-                        chamberData.humiSP = (float)strtol(receivedData.substring(24, 28).c_str(), NULL, 16);
-                        // chamberData.tempMVOut = (float)strtol(receivedData.substring(28, 32).c_str(), NULL, 16);
-                        // chamberData.humiMVOut = (float)strtol(receivedData.substring(32, 36).c_str(), NULL, 16);
-                        // chamberData.pidNo = (int)strtol(receivedData.substring(36, 40).c_str(), NULL, 16);
-                        chamberData.nowSTS = (int)strtol(receivedData.substring(40, 44).c_str(), NULL, 16);
-
-                        // Validate data
-                        if (chamberData.tempPV >= MIN_TEMP_PV && chamberData.tempPV <= MAX_TEMP_PV &&
-                            chamberData.tempSP >= MIN_TEMP_SP && chamberData.tempSP <= MAX_TEMP_SP &&
-                            chamberData.humiPV >= MIN_HUMI_PV && chamberData.humiPV <= MAX_HUMI_PV &&
-                            chamberData.humiSP >= MIN_HUMI_PV && chamberData.humiSP <= MAX_HUMI_PV) {
-                            retryCount = 0; // Reset retry count on valid data
-                            echoRetryCount = 0; // Reset echo retry count on valid data
-                            sendDataMQTT(chamberData); 
-                        } else {
-                            retryCount++;
-                            if (retryCount < maxRetries) {
-                                DebugSerial::println("Invalid data received.");
-                            } else {
-                                DebugSerial::println("Consistent invalid data received. Resetting ESP...");
-                                ESP.restart(); // Reset the ESP if invalid data persists
-                            }
-                        }
-                    } else {
-                        DebugSerial::println("Invalid byte count in response.");
-                    }
-                } else {
-                    DebugSerial::println("Invalid response length.");
-                }
-            } else if (receivedData == hexCommand) {
-                echoRetryCount++;
-                if (echoRetryCount < maxEchoRetries) {
-                    DebugSerial::println("Received command echo.");
-                    chamberData.tempPV = 0;
-                    chamberData.tempSP = 0;
-                    chamberData.wetPV = 0;
-                    chamberData.wetSP = 0;
-                    chamberData.humiPV = 0;
-                    chamberData.humiSP = 0;
-                    chamberData.nowSTS = 0;
-                    sendDataMQTT(chamberData); 
-                } else {
-                    DebugSerial::println("Repeated command echo detected. Resetting ESP...");
-                    ESP.restart(); // Reset the ESP if repeated echoes persist
-                }
-            } else {
-                DebugSerial::println("Timeout while reading data.");
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(10000)); // Delay for 10 seconds
-            xSemaphoreGive(xSemaphore); // Give the semaphore back
-        }
-    }
-}
-
-void checkFirmwareTask(void *pvParameters) {
-    while (1) {
-        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE) {
-            if (WiFi.status() == WL_CONNECTED && WiFi.localIP().toString() != "0.0.0.0")
-            {
-                stopWatchDog();
-                OTACheck(true);
-                startWatchDog();
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(300000)); // Delay for 300 seconds (5 minutes)
-            xSemaphoreGive(xSemaphore); // Give the semaphore back
-        }
-    }
-}
 
 void printWifiInfo(){
     DebugSerial::println("");
