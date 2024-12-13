@@ -6,7 +6,7 @@
 #include "debugSerial.h"
 
 #define BUFFERSIZE 4000
-WiFiClient netOTA;
+WiFiClient otaClient;
 
 String vNewVersion = "N";
 
@@ -23,7 +23,7 @@ String OTACheck(boolean forceUpdate)
 
     String queryURL = _firmwareQuery + "&update=N";
     DebugSerial::println(queryURL);
-    client.begin(netOTA, queryURL.c_str());
+    client.begin(otaClient, queryURL.c_str());
 
     int httpResponseCode = client.GET();
 
@@ -70,7 +70,7 @@ void OTAUpdate()
 
     DebugSerial::println(fwVersionURL);
 
-    client.begin(netOTA, fwVersionURL.c_str());
+    client.begin(otaClient, fwVersionURL.c_str());
     // Get file, just to check if each reachable
     int resp = client.GET();
     DebugSerial::print("Response: ");

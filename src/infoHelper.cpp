@@ -3,7 +3,7 @@
 #include <ArduinoJson.h>
 #include "infoHelper.h"
 #include "debugSerial.h"
-WiFiClient netClient;
+WiFiClient infoClient;
 
 extern char boardID[23];
 
@@ -16,7 +16,7 @@ void checkDeviceExist()
 
     DebugSerial::println("Will connect " + queryURL);
 
-    client.begin(netClient, queryURL.c_str());
+    client.begin(infoClient, queryURL.c_str());
 
     int httpResponseCode = client.GET();
 
@@ -50,7 +50,7 @@ void signInfo()
     client.addHeader("X-Secret-Key", String(APPAPIKEY));
     String queryURL = String(APPAPI) + "/data?u_id=" + String(boardID);
     DebugSerial::println("Will connect " + queryURL);
-    client.begin(netClient, queryURL.c_str());
+    client.begin(infoClient, queryURL.c_str());
     JsonDocument doc;
     doc["u_id"] = String(boardID);
     doc["device_type"] = String(APPDEVTYPE);
@@ -81,7 +81,7 @@ void updateFirmver()
     HTTPClient client;
     client.addHeader("X-Secret-Key", String(APPAPIKEY));
     String queryURL = String(APPAPI) + "/firmware?u_id=" + String(boardID);
-    client.begin(netClient, queryURL.c_str());
+    client.begin(infoClient, queryURL.c_str());
     client.addHeader("Content-Type", "application/json");
     JsonDocument doc;
     doc["firm_ver"] = String(APPVERSION);
@@ -135,7 +135,7 @@ void printLocalTime()
 
 //     DebugSerial::println("Will connect " + queryURL);
 
-//     client.begin(netClient, queryURL.c_str());
+//     client.begin(infoClient, queryURL.c_str());
 
 //     int httpResponseCode = client.GET();
 

@@ -4,7 +4,7 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_task_wdt.h>
-#include "OTAHelper.h" // Include OTAHelper for firmware updates
+#include "OTAHelper.h"
 #include "infoHelper.h"
 #include "mqttHelper.h"
 #include "debugSerial.h"
@@ -53,10 +53,13 @@ void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, 
     request[7] = (crc >> 8) & 0xFF;             // High byte of CRC
 
     // Send the request
-    digitalWrite(eqsp32.getPin(EQ_RS485_EN), HIGH);       // Enable transmitter
+   
+    eqsp32.configSerial(RS485_TX, BAUD_RATE);       // Enable transmitter
+    delay(10); // Small delay to ensure the transceiver is ready
     eqsp32.Serial.write(request, 8);            // Write the request to UART
-    delay(10);                                  // Small delay
-    digitalWrite(eqsp32.getPin(EQ_RS485_EN), LOW);        // Disable transmitter
+    eqsp32.Serial.flush();                      // Ensure message sent                  
+    eqsp32.configSerial(RS485_RX, BAUD_RATE);        // Disable transmitter
+    delay(10); // Small delay to ensure the transceiver switches to receive mode
 }
 
 // Function to convert unsigned integer to signed float
@@ -113,8 +116,6 @@ void modbusTask(void *pvParameters) {
 
             // Send Modbus request
             modbusRequest(slaveAddr, functionCode, startAddr, regQuantity);
-
-            // Wait for response
             delay(200); // Wait for response
             processModbusResponse();
 
@@ -141,30 +142,27 @@ void checkFirmwareTask(void *pvParameters) {
 void setup() {
     // Initialize Serial Monitor for debugging
     Serial.begin(115200);
-
+    snprintf(boardID, 23, "%llX", ESP.getEfuseMac()); //Get unique ESP MAC
     // Initialize EQSP32
-    EQSP32Configs configs;       
+    EQSP32Configs configs;    
+    configs.devSystemID = boardID;
     configs.userDevName = boardID;
     configs.wifiSSID = APPSSID;
     configs.wifiPassword = APPPASSWORD;
+    configs.relaySequencer = false;                           
+    configs.mqttDiscovery = false; 
     eqsp32.begin(configs, false);
-
-    // Configure RS-485 pins
-    pinMode(eqsp32.getPin(EQ_RS485_TX), OUTPUT);    // TX pin as output
-    pinMode(eqsp32.getPin(EQ_RS485_RX), INPUT);     // RX pin as input
-    pinMode(eqsp32.getPin(EQ_RS485_EN), OUTPUT);    // RS485 Enable pin as output
-    digitalWrite(eqsp32.getPin(EQ_RS485_EN), LOW); // Default to receive mode
-
+   
     // Configure UART for RS-485
     eqsp32.configSerial(RS485_TX, BAUD_RATE);
     eqsp32.configSerial(RS485_RX, BAUD_RATE);
 
     //Wifi controls
-    WiFi.onEvent(WiFiStationConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
-    WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+    // WiFi.onEvent(WiFiStationConnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_CONNECTED);
+    // WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
     
     startWatchDog(); //Start watch dog, if cannot connect to the wifi, esp will restart after 60 secs
-    setup_wifi();
+    //setup_wifi(); //Handled by EQSP32
     setup_mqtt();
     checkDeviceExist();
 
