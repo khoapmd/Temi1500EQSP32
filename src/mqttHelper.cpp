@@ -141,9 +141,12 @@ void callback(char *topic, byte *payload, unsigned int length)
     if (payloadStr == "STATUS")
     {
       char dataToSend[256];
+      String ipAddress = WiFi.localIP().toString();
+      // Get the uptime in HH:MM:SS format
+      String uptime = getUptime();
       snprintf(dataToSend, sizeof(dataToSend),
                "{\"sensor_id\":\"%s\",\"ip\":\"%s\",\"uptime\":%lu}",
-               boardID, WiFi.localIP(), getUptime());
+               boardID, ipAddress.c_str(), uptime.c_str());
 
       // Publish the data
       mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);
