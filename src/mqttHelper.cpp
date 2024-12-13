@@ -5,6 +5,7 @@
 #include <mqttHelper.h>
 #include "OTAHelper.h"
 #include "debugSerial.h"
+#include <time.h>
 
 #define MSG_BUFFER_SIZE (50)
 
@@ -24,22 +25,36 @@ int value = 0;
 
 extern char boardID[23];
 
-String getUptime()
-{
+String getUptime() {
   unsigned long millisSinceStart = millis();
   unsigned long seconds = millisSinceStart / 1000;
   unsigned long minutes = seconds / 60;
   unsigned long hours = minutes / 60;
+  unsigned long days = hours / 24;
 
-  // Adjust seconds, minutes, and hours to ensure they don't exceed their limits
-  seconds = seconds % 60;
-  minutes = minutes % 60;
-
-  // Format the uptime as HH:MM:SS
-  char uptimeString[16];
-  snprintf(uptimeString, sizeof(uptimeString), "%02lu:%02lu:%02lu", hours, minutes, seconds);
+  // Format the uptime as "X days, HH:MM:SS"
+  char uptimeString[64];
+  snprintf(uptimeString, sizeof(uptimeString), "%lu days, %02lu:%02lu:%02lu", 
+           days, hours % 24, minutes % 60, seconds % 60);
 
   return String(uptimeString);
+}
+
+String getDateTimeFromUptime(unsigned long uptimeSeconds) {
+  // Get the current Unix timestamp (seconds since 1970)
+  time_t now = time(nullptr);
+
+  // Calculate the boot time by subtracting uptime from the current time
+  time_t bootTime = now - uptimeSeconds;
+
+  // Convert the boot time to a tm structure
+  struct tm *timeinfo = localtime(&bootTime);
+
+  // Format the date-time as a string (e.g., "YYYY-MM-DD HH:MM:SS")
+  char dateTimeString[20];
+  strftime(dateTimeString, sizeof(dateTimeString), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+  return String(dateTimeString);
 }
 
 void setup_wifi()
@@ -144,9 +159,10 @@ void callback(char *topic, byte *payload, unsigned int length)
       String ipAddress = WiFi.localIP().toString();
       // Get the uptime in HH:MM:SS format
       String uptime = getUptime();
-      snprintf(dataToSend, sizeof(dataToSend),
-               "{\"sensor_id\":\"%s\",\"ip\":\"%s\",\"uptime\":%lu}",
-               boardID, ipAddress.c_str(), uptime.c_str());
+      String bootTime = getDateTimeFromUptime(millis() / 1000);
+      snprintf(dataToSend, sizeof(dataToSend), 
+           "{\"mac\":\"%s\",\"ip\":\"%s\",\"uptime\":\"%s\",\"bootTime\":\"%s\",\"appVersion\":\"%s\",\"appScreenSize\":\"%s\",\"appUpdName\":\"%s\",\"appDevType\":\"%s\"}", 
+           boardID, ipAddress.c_str(), uptime.c_str(), bootTime.c_str(), APPVERSION, APPSCREENSIZE, APPUPDNAME, APPDEVTYPE);
 
       // Publish the data
       mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);
