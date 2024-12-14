@@ -1,5 +1,4 @@
 #include "main.h"
-#include "hex.h"
 
 void setup_mqtt();
 void reconnect();

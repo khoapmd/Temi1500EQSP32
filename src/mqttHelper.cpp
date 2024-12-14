@@ -5,7 +5,8 @@
 #include <mqttHelper.h>
 #include "OTAHelper.h"
 #include "debugSerial.h"
-#include <time.h>
+#include <timeHelper.h>
+#include "infoHelper.h"
 
 #define MSG_BUFFER_SIZE (50)
 
@@ -24,38 +25,6 @@ char msg[MSG_BUFFER_SIZE];
 int value = 0;
 
 extern char boardID[23];
-
-String getUptime() {
-  unsigned long millisSinceStart = millis();
-  unsigned long seconds = millisSinceStart / 1000;
-  unsigned long minutes = seconds / 60;
-  unsigned long hours = minutes / 60;
-  unsigned long days = hours / 24;
-
-  // Format the uptime as "X days, HH:MM:SS"
-  char uptimeString[64];
-  snprintf(uptimeString, sizeof(uptimeString), "%lu days, %02lu:%02lu:%02lu", 
-           days, hours % 24, minutes % 60, seconds % 60);
-
-  return String(uptimeString);
-}
-
-String getDateTimeFromUptime(unsigned long uptimeSeconds) {
-  // Get the current Unix timestamp (seconds since 1970)
-  time_t now = time(nullptr);
-
-  // Calculate the boot time by subtracting uptime from the current time
-  time_t bootTime = now - uptimeSeconds;
-
-  // Convert the boot time to a tm structure
-  struct tm *timeinfo = localtime(&bootTime);
-
-  // Format the date-time as a string (e.g., "YYYY-MM-DD HH:MM:SS")
-  char dateTimeString[20];
-  strftime(dateTimeString, sizeof(dateTimeString), "%Y-%m-%d %H:%M:%S", timeinfo);
-
-  return String(dateTimeString);
-}
 
 void setup_wifi()
 {
@@ -86,7 +55,9 @@ void reconnect()
     DebugSerial::print(".");
     delay(500);
   }
-  DebugSerial::println("WiFi Connected!");
+  printWifiInfo();
+  setupNTP();
+  checkDeviceExist();
 
   // Prepare will message
   String willMessageStr = "{\"status\":\"disconnected\", \"client\":\"" + String(boardID) + "\", \"appver\":\"" + String(APPVERSION) + "\"}";
@@ -165,7 +136,7 @@ void callback(char *topic, byte *payload, unsigned int length)
            boardID, ipAddress.c_str(), uptime.c_str(), bootTime.c_str(), APPVERSION, APPSCREENSIZE, APPUPDNAME, APPDEVTYPE);
 
       // Publish the data
-      mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);
+      mqttClient.publish(String(APPPMQTTCMDTOPIC).c_str(), dataToSend);
 
       // Print the data to debug serial
       DebugSerial::println(dataToSend);
