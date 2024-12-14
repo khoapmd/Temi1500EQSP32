@@ -1,12 +1,5 @@
 #include <PubSubClient.h>
-#include <WiFi.h>
-#include <esp_task_wdt.h>
-#include <esp_heap_caps.h>
-#include <mqttHelper.h>
-#include "OTAHelper.h"
-#include "debugSerial.h"
-#include <timeHelper.h>
-#include "infoHelper.h"
+#include "main.h"
 
 #define MSG_BUFFER_SIZE (50)
 
@@ -162,7 +155,7 @@ void mqttLoop()
   mqttClient.loop();
 }
 
-void sendDataMQTT(ChamberData &data)
+void sendDataMQTT(const ChamberData& data)
 {
   char dataToSend[256];
   snprintf(dataToSend, sizeof(dataToSend),

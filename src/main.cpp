@@ -1,16 +1,9 @@
-#include <Arduino.h>
-#include "EQSP32.h"
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/semphr.h>
-#include <esp_task_wdt.h>
-#include "OTAHelper.h"
-#include "mqttHelper.h"
-#include "debugSerial.h"
-#include "timeHelper.h"
+#include "main.h"
 
-// Define RS-485 pins and baud rate
-#define BAUD_RATE 115200
+#define BAUD_RATE 115200 // Define RS-485 baud rate
+#define MODBUS_TIMEOUT 1000 // Timeout for Modbus response in milliseconds
+#define MAX_DATA_LENGTH 51  // Adjust based on your expected maximum message length
+#define WDT_TIMEOUT 300 //5 minutes
 
 // EQSP32 instance
 EQSP32 eqsp32;
@@ -19,48 +12,13 @@ char boardID[23];
 // Semaphore for thread-safe access to shared resources
 SemaphoreHandle_t xSemaphore = NULL;
 
-// Function to calculate CRC for Modbus RTU
-uint16_t calculateCRC(const uint8_t *data, size_t length)
-{
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < length; i++)
-    {
-        crc ^= data[i];
-        for (int j = 0; j < 8; j++)
-        {
-            if (crc & 0x0001)
-            {
-                crc >>= 1;
-                crc ^= 0xA001;
-            }
-            else
-            {
-                crc >>= 1;
-            }
-        }
-    }
-    return crc;
-}
-
 // Function to send Modbus RTU request
 void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, uint16_t regQuantity)
 {
     // Prepare the request message
     uint8_t request[8];
-    request[0] = slaveAddr;                 // Slave address
-    request[1] = functionCode;              // Function code (0x03 for Read Holding Registers)
-    request[2] = (startAddr >> 8) & 0xFF;   // High byte of start address
-    request[3] = startAddr & 0xFF;          // Low byte of start address
-    request[4] = (regQuantity >> 8) & 0xFF; // High byte of register count
-    request[5] = regQuantity & 0xFF;        // Low byte of register count
-
-    // Calculate CRC
-    uint16_t crc = calculateCRC(request, 6);
-    request[6] = crc & 0xFF;        // Low byte of CRC
-    request[7] = (crc >> 8) & 0xFF; // High byte of CRC
-
+    prepareModbusRequest(request, slaveAddr, functionCode, startAddr, regQuantity);
     // Send the request
-
     eqsp32.configSerial(RS485_TX, BAUD_RATE); // Enable transmitter
     delay(10);                                // Small delay to ensure the transceiver is ready
     eqsp32.Serial.write(request, 8);          // Write the request to UART
@@ -73,67 +31,18 @@ void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, 
     }
 }
 
-// Function to convert unsigned integer to signed float
-float unsignedToSignedFloat(uint16_t value)
-{
-    if (value > 32767)
-    {                   // Check if the value is greater than the maximum positive signed 16-bit value
-        value -= 65536; // Convert to negative signed value
-    }
-    return static_cast<float>(value) / 10.0; // Convert to float and divide by 10 (assuming scaling factor)
-}
-
-// Function to process Modbus response
-void processModbusResponse()
-{
-    if (eqsp32.Serial.available())
-    {
-        uint8_t response[256];
-        memset(response, 0, sizeof(response));
-        size_t responseLength = eqsp32.Serial.readBytes(response, 256);
-        
-        for (size_t i = 0; i < responseLength; i++)
-        {
-            uint8_t highNibble = (response[i]>>8) & 0xFF; // Extract high nibble
-            uint8_t lowNibble = response[i] & 0xFF;         // Extract low nibble
-
-            DebugSerial::print(highNibble); // Print high nibble as hex
-            DebugSerial::print(lowNibble);  // Print low nibble as hex
-            DebugSerial::print(" ");             // Add a space between bytes
+// Function to wait for Modbus response with timeout
+bool waitForModbusResponse(uint8_t* response, size_t* responseLength, uint32_t timeout) {
+    memset(response, 0, 256); // Clear the response buffer
+    uint32_t startTime = millis();
+    while (millis() - startTime < timeout) {
+        if (eqsp32.Serial.available()) {
+            *responseLength = eqsp32.Serial.readBytes(response, 256);
+            return true; // Response received
         }
-        // Validate CRC
-        uint16_t crc = calculateCRC(response, responseLength - 2);
-        if (crc == (response[responseLength - 1] << 8) | response[responseLength - 2])
-        {
-            DebugSerial::println("CRC Validated Successfully");
-
-            // Extract register values
-            uint8_t dataBytesLength = response[2]; // Byte count (third byte in response)
-            uint8_t dataBytes[dataBytesLength];
-            memcpy(dataBytes, &response[3], dataBytesLength); // Copy data bytes (skip slave address, function code, byte count, and CRC)
-
-            DebugSerial::print("Register Values: ");
-            for (uint8_t i = 0; i < dataBytesLength; i += 2)
-            {
-                uint16_t value = (dataBytes[i] << 8) | dataBytes[i + 1]; // Combine high and low bytes
-                if (i < dataBytesLength - 2)
-                {
-                    value = unsignedToSignedFloat(value); // Convert D1 to D9 to signed float
-                }
-                DebugSerial::print(value);
-                DebugSerial::print(" ");
-            }
-            DebugSerial::println("");
-        }
-        else
-        {
-            DebugSerial::println("CRC Validation Failed");
-        }
+        delay(10); // Small delay to avoid busy-waiting
     }
-    else
-    {
-        DebugSerial::println("No Response Received");
-    }
+    return false; // Timeout
 }
 
 // Task to handle Modbus communication
@@ -152,7 +61,19 @@ void modbusTask(void *pvParameters)
             // Send Modbus request
             modbusRequest(slaveAddr, functionCode, startAddr, regQuantity);
             delay(200); // Wait for response
-            processModbusResponse();
+            // Wait for response with timeout
+            uint8_t response[256];
+            size_t responseLength = 0;
+            ChamberData chamberData;
+            memset(&chamberData, 0, sizeof(chamberData)); // Initialize all fields to 0
+            if (waitForModbusResponse(response, &responseLength, MODBUS_TIMEOUT)) {
+                // Process the response
+                chamberData = readModbusResponse(response, responseLength);
+                
+            } else {
+                DebugSerial::println("Modbus response timeout");
+            }
+            sendDataMQTT(chamberData);
 
             xSemaphoreGive(xSemaphore); // Release the semaphore
         }
