@@ -9,13 +9,21 @@ const int daylightOffset_sec = 0;       // No daylight saving time
 void setupNTP() {
   // Configure NTP server and timezone
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
+  unsigned long startTime = millis(); // Record the start time
+  const unsigned long timeout = 10000; // Timeout in milliseconds (e.g., 10 seconds)
   // Wait for time synchronization
   Serial.println("Waiting for NTP time sync...");
   while (time(nullptr) < 8 * 3600) { // Wait until the time is synced
+    if (millis() - startTime >= timeout) {
+      Serial.println("NTP time sync timed out.");
+      break; // Exit the loop if timeout is reached
+    }
     delay(100);
   }
-  Serial.println("NTP time sync complete.");
+
+  if (time(nullptr) >= 8 * 3600) {
+    Serial.println("NTP time sync complete.");
+  }
 }
 
 String getUptime() {
