@@ -84,7 +84,7 @@ void modbusTask(void *pvParameters)
 
             xSemaphoreGive(xSemaphore); // Release the semaphore
         }
-        vTaskDelay(pdMS_TO_TICKS(10000)); // Delay for 10 seconds before the next request
+        vTaskDelay(pdMS_TO_TICKS(60000)); // TODO: use the reference lib and read config from database
     }
 }
 
