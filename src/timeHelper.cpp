@@ -1,41 +1,34 @@
 #include <Arduino.h>
 #include <time.h>
 #include <timeHelper.h>
+#include "debugSerial.h"
 // NTP server and timezone settings
 const char* ntpServer = APPPNTPSERVER; // NTP server
-const long gmtOffset_sec = 25200;    // GMT+7 offset in seconds
-const int daylightOffset_sec = 0;       // No daylight saving time
+const long gmtOffset_sec = 7*3600;    // GMT+7 offset in seconds
+const int daylightOffset_sec = 3600;
 
 void printLocalTime()
 {
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo))
     {
-        Serial.println("Failed to obtain time");
+        DebugSerial::println("Failed to obtain time");
         return;
     }
-    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+    DebugSerial::println(&timeinfo);
 }
 
-void setupNTP() {
+void syncNTP() {
   // Configure NTP server and timezone
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  unsigned long startTime = millis(); // Record the start time
-  const unsigned long timeout = 10000; // Timeout in milliseconds (e.g., 10 seconds)
-  // Wait for time synchronization
-  Serial.println("Waiting for NTP time sync...");
-  while (time(nullptr) < 8 * 3600) { // Wait until the time is synced
-    if (millis() - startTime >= timeout) {
-      Serial.println("NTP time sync timed out.");
-      break; // Exit the loop if timeout is reached
-    }
-    delay(100);
+  DebugSerial::println("Waiting for NTP time sync...");
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    DebugSerial::println("Failed to obtain time");
+    return;
   }
-
-  if (time(nullptr) >= 8 * 3600) {
-    Serial.println("NTP time sync complete.");
-    printLocalTime();
-  }
+   DebugSerial::println("Time synchronized successfully!");
+  printLocalTime();
 }
 
 String getUptime() {

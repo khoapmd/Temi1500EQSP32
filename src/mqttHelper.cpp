@@ -2,7 +2,7 @@
 #include "main.h"
 
 #define MSG_BUFFER_SIZE (50)
-
+extern EQSP32 eqsp32;
 // Update these with values suitable for your network.
 const char *ssid = APPSSID;
 const char *password = APPPASSWORD;
@@ -19,37 +19,35 @@ int value = 0;
 
 extern char boardID[23];
 
-void setup_wifi()
-{
-  delay(10);
-  DebugSerial::print("Connecting to ");
-  DebugSerial::println(ssid);
+// void setup_wifi()
+// {
+//   delay(10);
+//   DebugSerial::print("Connecting to ");
+//   DebugSerial::println(ssid);
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+//   WiFi.mode(WIFI_STA);
+//   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    DebugSerial::print(".");
-  }
+//   while (WiFi.status() != WL_CONNECTED)
+//   {
+//     delay(500);
+//     DebugSerial::print(".");
+//   }
 
-  randomSeed(micros());
-  printWifiInfo();
-}
+//   randomSeed(micros());
+//   printWifiInfo();
+// }
 
 void reconnect()
 {
   startWatchDog();
-
   // Ensure WiFi is connected
-  while (WiFi.status() != WL_CONNECTED)
+  while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
   {
     DebugSerial::print(".");
     delay(500);
   }
   printWifiInfo();
-  setupNTP();
   checkDeviceExist();
 
   // Prepare will message

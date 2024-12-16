@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <string.h>
 
-void setupNTP();
+void syncNTP();
 String getUptime();
 String getDateTimeFromUptime(unsigned long uptimeSeconds);

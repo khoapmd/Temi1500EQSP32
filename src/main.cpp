@@ -1,9 +1,9 @@
 #include "main.h"
 
-#define BAUD_RATE 115200 // Define RS-485 baud rate
+#define BAUD_RATE 115200    // Define RS-485 baud rate
 #define MODBUS_TIMEOUT 1000 // Timeout for Modbus response in milliseconds
 #define MAX_DATA_LENGTH 51  // Adjust based on your expected maximum message length
-#define WDT_TIMEOUT 300 //5 minutes
+#define WDT_TIMEOUT 300     // 5 minutes
 
 // EQSP32 instance
 EQSP32 eqsp32;
@@ -69,15 +69,18 @@ void modbusTask(void *pvParameters)
             size_t responseLength = 0;
             ChamberData chamberData;
             memset(&chamberData, 0, sizeof(chamberData)); // Initialize all fields to 0
-            if (waitForModbusResponse(response, &responseLength, MODBUS_TIMEOUT)) {
+            if (waitForModbusResponse(response, &responseLength, MODBUS_TIMEOUT))
+            {
                 // Process the response
                 chamberData = readModbusResponse(response, responseLength);
-                for (size_t i = 0; i < responseLength; i++) {
+                for (size_t i = 0; i < responseLength; i++)
+                {
                     Serial.print(response[i], HEX);
                     Serial.print(" ");
                 }
-                
-            } else {
+            }
+            else
+            {
                 DebugSerial::println("Modbus response timeout");
             }
             sendDataMQTT(chamberData);
@@ -95,7 +98,7 @@ void checkFirmwareTask(void *pvParameters)
     {
         if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
         {
-            if (WiFi.status() == WL_CONNECTED && WiFi.localIP().toString() != "0.0.0.0")
+            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
             {
                 DebugSerial::println("Checking for firmware updates...");
                 OTACheck(true); // Call OTAHelper function to check for updates
@@ -103,6 +106,23 @@ void checkFirmwareTask(void *pvParameters)
             xSemaphoreGive(xSemaphore); // Release the semaphore
         }
         vTaskDelay(pdMS_TO_TICKS(300000)); // Delay for 300 seconds (5 minutes)
+    }
+}
+
+// Task to check for firmware updates
+void syncNTPTask(void *pvParameters)
+{
+    while (1)
+    {
+        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
+        {
+            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
+            {
+               syncNTP();        
+            }
+            xSemaphoreGive(xSemaphore); // Release the semaphore
+        }
+        vTaskDelay(pdMS_TO_TICKS(3600000)); // Delay for 1 hour
     }
 }
 
@@ -119,6 +139,7 @@ void setup()
     configs.wifiPassword = APPPASSWORD;
     configs.relaySequencer = false;
     configs.mqttDiscovery = false;
+    configs.customMobileApp = false;
     eqsp32.begin(configs, false);
 
     // Configure UART for RS-485
@@ -127,6 +148,11 @@ void setup()
 
     startWatchDog(); // Start watch dog, if cannot connect to the wifi, esp will restart after 60 secs
     // setup_wifi(); //Handled by EQSP32
+    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
+    {
+        delay(500);
+        DebugSerial::print(".");
+    }
     setup_mqtt();
 
     // Create a semaphore
@@ -139,6 +165,7 @@ void setup()
     // Create tasks
     xTaskCreate(modbusTask, "ModbusTask", 4096, NULL, 1, NULL);
     xTaskCreate(checkFirmwareTask, "CheckFirmwareTask", 4096, NULL, 1, NULL);
+    xTaskCreate(syncNTPTask, "syncNTPTask", 7168, NULL, 1, NULL);
 }
 
 void loop()
