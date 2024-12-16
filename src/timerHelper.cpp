@@ -3,8 +3,19 @@
 #include <timeHelper.h>
 // NTP server and timezone settings
 const char* ntpServer = APPPNTPSERVER; // NTP server
-const long gmtOffset_sec = 7 * 3600;    // GMT+7 offset in seconds
+const long gmtOffset_sec = 25200;    // GMT+7 offset in seconds
 const int daylightOffset_sec = 0;       // No daylight saving time
+
+void printLocalTime()
+{
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo))
+    {
+        Serial.println("Failed to obtain time");
+        return;
+    }
+    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
 
 void setupNTP() {
   // Configure NTP server and timezone
@@ -23,6 +34,7 @@ void setupNTP() {
 
   if (time(nullptr) >= 8 * 3600) {
     Serial.println("NTP time sync complete.");
+    printLocalTime();
   }
 }
 

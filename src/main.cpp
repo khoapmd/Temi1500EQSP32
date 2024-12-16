@@ -20,27 +20,32 @@ void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, 
     prepareModbusRequest(request, slaveAddr, functionCode, startAddr, regQuantity);
     // Send the request
     eqsp32.configSerial(RS485_TX, BAUD_RATE); // Enable transmitter
-    delay(10);                                // Small delay to ensure the transceiver is ready
     eqsp32.Serial.write(request, 8);          // Write the request to UART
     eqsp32.Serial.flush();                    // Ensure message sent
     eqsp32.configSerial(RS485_RX, BAUD_RATE); // Disable transmitter
-    delay(10);                                // Small delay to ensure the transceiver switches to receive mode
-    // Clear the receive buffer prevent echo
-    while (eqsp32.Serial.available()) {
-        eqsp32.Serial.read();
-    }
 }
 
-// Function to wait for Modbus response with timeout
-bool waitForModbusResponse(uint8_t* response, size_t* responseLength, uint32_t timeout) {
+bool waitForModbusResponse(uint8_t *response, size_t *responseLength, uint32_t timeout)
+{
     memset(response, 0, 256); // Clear the response buffer
     uint32_t startTime = millis();
-    while (millis() - startTime < timeout) {
-        if (eqsp32.Serial.available()) {
+
+    while (millis() - startTime < timeout)
+    {
+        if (eqsp32.Serial.available())
+        {
+            // Read the entire response into the buffer
             *responseLength = eqsp32.Serial.readBytes(response, 256);
-            return true; // Response received
+
+            // Check if the response is at least as long as the request (8 bytes)
+            if (*responseLength > 8)
+            {
+                // Remove the first 8 bytes (echo of the request)
+                memmove(response, response + 8, *responseLength - 8);
+                *responseLength -= 8;
+                return true; // Response received
+            }
         }
-        delay(10); // Small delay to avoid busy-waiting
     }
     return false; // Timeout
 }
@@ -60,8 +65,6 @@ void modbusTask(void *pvParameters)
 
             // Send Modbus request
             modbusRequest(slaveAddr, functionCode, startAddr, regQuantity);
-            delay(200); // Wait for response
-            // Wait for response with timeout
             uint8_t response[256];
             size_t responseLength = 0;
             ChamberData chamberData;
@@ -69,6 +72,10 @@ void modbusTask(void *pvParameters)
             if (waitForModbusResponse(response, &responseLength, MODBUS_TIMEOUT)) {
                 // Process the response
                 chamberData = readModbusResponse(response, responseLength);
+                for (size_t i = 0; i < responseLength; i++) {
+                    Serial.print(response[i], HEX);
+                    Serial.print(" ");
+                }
                 
             } else {
                 DebugSerial::println("Modbus response timeout");

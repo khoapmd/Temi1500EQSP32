@@ -26,7 +26,7 @@ void checkDeviceExist()
         signInfo();
     }
     else if(httpResponseCode == 200){ //info exist, check firm_ver
-        DebugSerial::println("info exist, check firm_ver");
+        DebugSerial::println("info exist, check firm_ver on db");
         JsonDocument doc;
         deserializeJson(doc, client.getString());
         if(String(APPVERSION) != doc["firm_ver"]){
@@ -105,65 +105,3 @@ void updateFirmver()
 
     client.end();
 }
-
-
-
-// void getNTP()
-// {
-//   configTime(this->gmtOffset_sec, this->daylightOffset_sec, this->ntpServer.c_str());
-//   printLocalTime();
-// }
-
-void printLocalTime()
-{
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo))
-    {
-        DebugSerial::println("Failed to obtain time");
-        return;
-    }
-    DebugSerial::println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-}
-
-// bool getExtraInfo()
-// {
-//     HTTPClient client;
-
-//     JsonDocument doc;
-
-//     String queryURL = String(APPAPI) + "/getExtInfo?key=" + String(APPAPIKEY) + "&code=" + String(boardID);
-
-//     DebugSerial::println("Will connect " + queryURL);
-
-//     client.begin(infoClient, queryURL.c_str());
-
-//     int httpResponseCode = client.GET();
-
-//     if (httpResponseCode > 0)
-//     {
-//         DebugSerial::print("HTTP Response code: ");
-//         DebugSerial::println(httpResponseCode);
-//         String payload = client.getString();
-
-//         DebugSerial::println("Response " + payload);
-
-//         DeserializationError error = deserializeJson(doc, payload);
-
-//         if (error)
-//         {
-//             DebugSerial::print(F("deserializeJson() failed: "));
-//             DebugSerial::println(error.f_str());
-//             client.end();
-//             return false;
-//         }
-//     }
-//     else
-//     {
-//         client.end();
-//         return false;
-//     }
-
-//     client.end();
-
-//     return true;
-// }
