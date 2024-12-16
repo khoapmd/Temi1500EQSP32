@@ -122,7 +122,7 @@ void syncNTPTask(void *pvParameters)
             }
             xSemaphoreGive(xSemaphore); // Release the semaphore
         }
-        vTaskDelay(pdMS_TO_TICKS(3600000)); // Delay for 1 hour
+        vTaskDelay(pdMS_TO_TICKS(600000)); // Delay for 10 minutes
     }
 }
 
