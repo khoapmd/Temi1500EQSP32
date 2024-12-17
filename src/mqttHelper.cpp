@@ -27,7 +27,6 @@ void reconnect()
     DebugSerial::print(".");
     delay(500);
   }
-  printWifiInfo();
 
   // Prepare will message
   String willMessageStr = "{\"status\":\"disconnected\", \"client\":\"" + String(boardID) + "\", \"appver\":\"" + String(APPVERSION) + "\", \"appScreenSize\":\"" + String(APPSCREENSIZE) + "\", \"appUpdName\":\"" + String(APPUPDNAME) + "\", \"appDevType\":\"" + String(APPDEVTYPE) + "\"}";

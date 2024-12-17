@@ -157,6 +157,7 @@ void setup()
     // Initialize Serial Monitor for debugging
     Serial.begin(115200);
     snprintf(boardID, 23, "%llX", ESP.getEfuseMac()); // Get unique ESP MAC
+    
     // Initialize EQSP32
     EQSP32Configs configs;
     configs.devSystemID = boardID;
@@ -179,8 +180,8 @@ void setup()
         delay(500);
         DebugSerial::print(".");
     }
-    setup_mqtt();
-    checkDeviceExist();
+
+    printWifiInfo();
 
     // Create a semaphore
     xSemaphore = xSemaphoreCreateBinary();
@@ -194,6 +195,11 @@ void setup()
     xTaskCreate(checkFirmwareTask, "CheckFirmwareTask", 8192, NULL, 1, &checkFirmwareTaskHandle);
     xTaskCreate(syncNTPTask, "syncNTPTask", 4096, NULL, 1, &syncNTPTaskHandle);
     xTaskCreate(stackMonitorTask, "StackMonitorTask", 4096, NULL, 1, NULL);
+
+    delay(500);
+    checkDeviceExist();
+    delay(500);
+    setup_mqtt();
 }
 
 void loop()
@@ -222,7 +228,7 @@ void printWifiInfo()
     DebugSerial::println("");
     DebugSerial::println("WiFi connected");
     DebugSerial::print("Connected Network Signal Strength (RSSI): ");
-    DebugSerial::println(WiFi.RSSI() + "dBm"); /*Print WiFi signal strength*/
+    DebugSerial::println(WiFi.RSSI()); /*Print WiFi signal strength*/
     DebugSerial::print("Gateway: ");
     DebugSerial::println(WiFi.gatewayIP());
     DebugSerial::print("IP address: ");
