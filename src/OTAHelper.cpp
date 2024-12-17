@@ -1,4 +1,3 @@
-#include <WiFi.h>
 #include <HTTPClient.h>
 #include <Update.h>
 #include <ArduinoJson.h>
@@ -6,7 +5,6 @@
 #include "debugSerial.h"
 
 #define BUFFERSIZE 4000
-WiFiClient otaClient;
 
 String vNewVersion = "N";
 
@@ -18,12 +16,11 @@ String _firmwareQuery = String(APPAPI) + "/firmware?filePrefix=" + String(APPUPD
 String OTACheck(boolean forceUpdate)
 {
     HTTPClient client;
+    String queryURL = _firmwareQuery + "&update=N";
+    DebugSerial::println("Will connect " + queryURL);
+    client.begin(queryURL.c_str());
     client.addHeader("X-Secret-Key", String(APPAPIKEY));
     JsonDocument doc;
-
-    String queryURL = _firmwareQuery + "&update=N";
-    DebugSerial::println(queryURL);
-    client.begin(otaClient, queryURL.c_str());
 
     int httpResponseCode = client.GET();
 
@@ -62,15 +59,15 @@ void OTAUpdate()
 {
     // Connect to external web server
     HTTPClient client;
-    client.addHeader("X-Secret-Key", String(APPAPIKEY));
-    int loopNumber = 0;
-    DebugSerial::println("Checking if new firmware is available.");
-
     String fwVersionURL = _firmwareQuery + "&update=Y";
+    DebugSerial::println("Checking if new firmware is available.");
+    DebugSerial::println("Will connect " + fwVersionURL);
 
-    DebugSerial::println(fwVersionURL);
+    client.begin(fwVersionURL.c_str());
+    client.addHeader("X-Secret-Key", String(APPAPIKEY));
 
-    client.begin(otaClient, fwVersionURL.c_str());
+    int loopNumber = 0;
+
     // Get file, just to check if each reachable
     int resp = client.GET();
     DebugSerial::print("Response: ");

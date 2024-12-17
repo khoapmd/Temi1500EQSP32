@@ -1,9 +1,7 @@
-#include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include "infoHelper.h"
 #include "debugSerial.h"
-WiFiClient infoClient;
 
 extern char boardID[23];
 
@@ -11,12 +9,10 @@ void checkDeviceExist()
 {
     HTTPClient client;
     JsonDocument doc;
-    client.addHeader("X-Secret-Key", String(APPAPIKEY));
     String queryURL = String(APPAPI) + "/checkexist?u_id=" + String(boardID);
-
     DebugSerial::println("Will connect " + queryURL);
-
-    client.begin(infoClient, queryURL.c_str());
+    client.begin(queryURL.c_str());
+    client.addHeader("X-Secret-Key", String(APPAPIKEY));
 
     int httpResponseCode = client.GET();
 
@@ -48,11 +44,11 @@ void checkDeviceExist()
 void signInfo()
 {
     HTTPClient client;
-    client.addHeader("Content-Type", "application/json");
-    client.addHeader("X-Secret-Key", String(APPAPIKEY));
     String queryURL = String(APPAPI) + "/data?u_id=" + String(boardID);
     DebugSerial::println("Will connect " + queryURL);
-    client.begin(infoClient, queryURL.c_str());
+    client.begin(queryURL.c_str());
+    client.addHeader("Content-Type", "application/json");
+    client.addHeader("X-Secret-Key", String(APPAPIKEY));
     JsonDocument doc;
     doc["u_id"] = String(boardID);
     doc["device_type"] = String(APPDEVTYPE);
@@ -81,9 +77,10 @@ void signInfo()
 void updateFirmver()
 {
     HTTPClient client;
-    client.addHeader("X-Secret-Key", String(APPAPIKEY));
     String queryURL = String(APPAPI) + "/firmware?u_id=" + String(boardID);
-    client.begin(infoClient, queryURL.c_str());
+    DebugSerial::println("Will connect " + queryURL);
+    client.begin(queryURL.c_str());
+    client.addHeader("X-Secret-Key", String(APPAPIKEY));
     client.addHeader("Content-Type", "application/json");
     JsonDocument doc;
     doc["firm_ver"] = String(APPVERSION);
