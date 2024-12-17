@@ -222,7 +222,7 @@ void printWifiInfo()
     DebugSerial::println("");
     DebugSerial::println("WiFi connected");
     DebugSerial::print("Connected Network Signal Strength (RSSI): ");
-    DebugSerial::println(WiFi.RSSI()); /*Print WiFi signal strength*/
+    DebugSerial::println(WiFi.RSSI() + "dBm"); /*Print WiFi signal strength*/
     DebugSerial::print("Gateway: ");
     DebugSerial::println(WiFi.gatewayIP());
     DebugSerial::print("IP address: ");
