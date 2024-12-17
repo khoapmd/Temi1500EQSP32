@@ -30,8 +30,10 @@ void checkDeviceExist()
         JsonDocument doc;
         deserializeJson(doc, client.getString());
         if(String(APPVERSION) != doc["firm_ver"]){
+            DebugSerial::println("Updating version in database");
             updateFirmver();
         }
+        else DebugSerial::println("Version matching");
     }
     else{
         DebugSerial::print("HTTP Response code: ");
