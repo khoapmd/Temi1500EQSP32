@@ -1,8 +1,12 @@
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include "main.h"
 
 #define MQTT_MAX_PACKET_SIZE 512
 extern EQSP32 eqsp32;
+
+extern TaskStackUsage stackUsageData;
+
 // Update these with values suitable for your network.
 const char *ssid = APPSSID;
 const char *password = APPPASSWORD;
@@ -29,33 +33,50 @@ void reconnect()
   }
 
   // Prepare will message
-  String willMessageStr = "{\"status\":\"disconnected\", \"client\":\"" + String(boardID) + "\", \"appver\":\"" + String(APPVERSION) + "\", \"appScreenSize\":\"" + String(APPSCREENSIZE) + "\", \"appUpdName\":\"" + String(APPUPDNAME) + "\", \"appDevType\":\"" + String(APPDEVTYPE) + "\"}";
+  JsonDocument willJsonDoc;
+  willJsonDoc["status"] = "disconnected";
+  willJsonDoc["client"] = boardID;
+  willJsonDoc["appver"] = APPVERSION;
+  willJsonDoc["appScreenSize"] = APPSCREENSIZE;
+  willJsonDoc["appUpdName"] = APPUPDNAME;
+  willJsonDoc["appDevType"] = APPDEVTYPE;
+
+  String willMessageStr;
+  serializeJson(willJsonDoc, willMessageStr);
   const char *willMessage = willMessageStr.c_str();
+
   String fullTopic = String(APPPMQTTSTSTOPIC) + "/" + boardID;
+
   // Loop until we're reconnected to the MQTT broker
   while (!mqttClient.connected())
   {
     DebugSerial::print("Attempting MQTT connection...");
-    
+
     // Attempt to connect with all parameters
-    if (mqttClient.connect(boardID,                          // Client ID
-                           mqtt_user,                        // Username
-                           mqtt_pass,                        // Password
+    if (mqttClient.connect(boardID,           // Client ID
+                           mqtt_user,         // Username
+                           mqtt_pass,         // Password
                            fullTopic.c_str(), // Will Topic
-                           2,                                // Will QoS
-                           true,                             // Will Retain
-                           willMessage,                      // Will Message
-                           true))
-    { // Clean Session
+                           2,                 // Will QoS
+                           true,              // Will Retain
+                           willMessage,       // Will Message
+                           true))             // Clean Session
+    {
       DebugSerial::println("MQTT Connected!");
 
       // Send connection acknowledgment
+      JsonDocument connectJsonDoc;
+      connectJsonDoc["status"] = "connected";
+      connectJsonDoc["client"] = boardID;
+      connectJsonDoc["ip"] = WiFi.localIP().toString();
+      connectJsonDoc["appVersion"] = APPVERSION;
+      connectJsonDoc["appScreenSize"] = APPSCREENSIZE;
+      connectJsonDoc["appUpdName"] = APPUPDNAME;
+      connectJsonDoc["appDevType"] = APPDEVTYPE;
+
       char dataToSend[256];
-      String ipAddress = WiFi.localIP().toString();
-      snprintf(dataToSend, sizeof(dataToSend), 
-           "{\"status\":\"connected\",\"client\":\"%s\",\"ip\":\"%s\",\"appVersion\":\"%s\",\"appScreenSize\":\"%s\",\"appUpdName\":\"%s\",\"appDevType\":\"%s\"}", 
-           boardID, ipAddress.c_str(), APPVERSION, APPSCREENSIZE, APPUPDNAME, APPDEVTYPE);
-      
+      serializeJson(connectJsonDoc, dataToSend, sizeof(dataToSend));
+
       mqttClient.publish(fullTopic.c_str(), dataToSend, true);
 
       // Subscribe to command topics
@@ -101,14 +122,26 @@ void callback(char *topic, byte *payload, unsigned int length)
     }
     if (payloadStr == "STATUS")
     {
+      JsonDocument statusJsonDoc;
+      statusJsonDoc["client"] = boardID;
+      statusJsonDoc["ip"] = WiFi.localIP().toString();
+      statusJsonDoc["uptime"] = getUptime();
+      statusJsonDoc["bootTime"] = getDateTimeFromUptime(millis() / 1000);
+      statusJsonDoc["appVersion"] = APPVERSION;
+      statusJsonDoc["appScreenSize"] = APPSCREENSIZE;
+      statusJsonDoc["appUpdName"] = APPUPDNAME;
+      statusJsonDoc["appDevType"] = APPDEVTYPE;
+      // // Add stack usage data
+      // JsonObject stackUsage = statusJsonDoc["stackUsage"].to<JsonObject>();
+      // stackUsage["modbusTask"] = stackUsageData.modbusTaskStack;
+      // stackUsage["firmwareTask"] = stackUsageData.firmwareTaskStack;
+      // stackUsage["ntpTask"] = stackUsageData.ntpTaskStack;
+
+      // // Add free heap
+      // statusJsonDoc["freeHeap"] = ESP.getFreeHeap();
+
       char dataToSend[256];
-      String ipAddress = WiFi.localIP().toString();
-      // Get the uptime in HH:MM:SS format
-      String uptime = getUptime();
-      String bootTime = getDateTimeFromUptime(millis() / 1000);
-      snprintf(dataToSend, sizeof(dataToSend), 
-           "{\"client\":\"%s\",\"ip\":\"%s\",\"uptime\":\"%s\",\"bootTime\":\"%s\",\"appVersion\":\"%s\",\"appScreenSize\":\"%s\",\"appUpdName\":\"%s\",\"appDevType\":\"%s\"}", 
-           boardID, ipAddress.c_str(), uptime.c_str(), bootTime.c_str(), APPVERSION, APPSCREENSIZE, APPUPDNAME, APPDEVTYPE);
+      serializeJson(statusJsonDoc, dataToSend, sizeof(dataToSend));
 
       // Publish the data
       mqttClient.publish(String(APPPMQTTCMDTOPIC).c_str(), dataToSend);
@@ -137,12 +170,20 @@ void mqttLoop()
   mqttClient.loop();
 }
 
-void sendDataMQTT(const ChamberData& data)
+void sendDataMQTT(const ChamberData &data)
 {
+  JsonDocument dataJsonDoc;
+  dataJsonDoc["client"] = boardID;
+  dataJsonDoc["tempPV"] = data.tempPV;
+  dataJsonDoc["tempSP"] = data.tempSP;
+  dataJsonDoc["wetPV"] = data.wetPV;
+  dataJsonDoc["wetSP"] = data.wetSP;
+  dataJsonDoc["humiPV"] = data.humiPV;
+  dataJsonDoc["humiSP"] = data.humiSP;
+  dataJsonDoc["nowSTS"] = data.nowSTS;
+
   char dataToSend[256];
-  snprintf(dataToSend, sizeof(dataToSend),
-           "{\"client\":\"%s\",\"tempPV\":%.2f,\"tempSP\":%.2f,\"wetPV\":%.2f,\"wetSP\":%.2f,\"humiPV\":%.2f,\"humiSP\":%.2f,\"nowSTS\":%d}",
-           boardID, data.tempPV, data.tempSP, data.wetPV, data.wetSP, data.humiPV, data.humiSP, data.nowSTS);
+  serializeJson(dataJsonDoc, dataToSend, sizeof(dataToSend));
 
   mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);
   DebugSerial::println(dataToSend);

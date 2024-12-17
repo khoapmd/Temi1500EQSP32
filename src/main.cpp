@@ -12,6 +12,7 @@ char boardID[23];
 // Semaphore for thread-safe access to shared resources
 SemaphoreHandle_t xSemaphore = NULL;
 // Global task handles to track all tasks
+TaskStackUsage stackUsageData;
 TaskHandle_t modbusTaskHandle = NULL;
 TaskHandle_t checkFirmwareTaskHandle = NULL;
 TaskHandle_t syncNTPTaskHandle = NULL;
@@ -136,14 +137,21 @@ void stackMonitorTask(void *pvParameters)
     {
         DebugSerial::println("--- TASK STACK USAGE REPORT ---");
 
-        if (modbusTaskHandle != NULL)
-            DebugSerial::printf("Modbus Task: %u bytes\n", uxTaskGetStackHighWaterMark(modbusTaskHandle));
+        // Collect stack usage data
+        if (modbusTaskHandle != NULL) {
+            stackUsageData.modbusTaskStack = uxTaskGetStackHighWaterMark(modbusTaskHandle);
+            DebugSerial::printf("Modbus Task: %u bytes\n", stackUsageData.modbusTaskStack);
+        }
 
-        if (checkFirmwareTaskHandle != NULL)
-            DebugSerial::printf("Firmware Task: %u bytes\n", uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle));
+        if (checkFirmwareTaskHandle != NULL) {
+            stackUsageData.firmwareTaskStack = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
+            DebugSerial::printf("Firmware Task: %u bytes\n", stackUsageData.firmwareTaskStack);
+        }
 
-        if (syncNTPTaskHandle != NULL)
-            DebugSerial::printf("NTP Task: %u bytes\n", uxTaskGetStackHighWaterMark(syncNTPTaskHandle));
+        if (syncNTPTaskHandle != NULL) {
+            stackUsageData.ntpTaskStack = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
+            DebugSerial::printf("NTP Task: %u bytes\n", stackUsageData.ntpTaskStack);
+        }
 
         // Overall system memory info
         DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());

@@ -20,13 +20,8 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info);
 void printWifiInfo();
 void checkFirmware();
 
-// typedef struct {
-//     float tempPV;
-//     float tempSP;
-//     float wetPV;
-//     float wetSP;
-//     float humiPV;
-//     float humiSP;
-//     uint16_t nowSTS;
-// } ChamberData;
-// extern ChamberData chamberData;
+struct TaskStackUsage {
+    uint32_t modbusTaskStack;
+    uint32_t firmwareTaskStack;
+    uint32_t ntpTaskStack;
+};
