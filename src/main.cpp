@@ -11,6 +11,10 @@ char boardID[23];
 
 // Semaphore for thread-safe access to shared resources
 SemaphoreHandle_t xSemaphore = NULL;
+// Global task handles to track all tasks
+TaskHandle_t modbusTaskHandle = NULL;
+TaskHandle_t checkFirmwareTaskHandle = NULL;
+TaskHandle_t syncNTPTaskHandle = NULL;
 
 // Function to send Modbus RTU request
 void modbusRequest(uint8_t slaveAddr, uint8_t functionCode, uint16_t startAddr, uint16_t regQuantity)
@@ -126,6 +130,38 @@ void syncNTPTask(void *pvParameters)
     }
 }
 
+void stackMonitorTask(void *pvParameters) 
+{
+    while (1) 
+    {
+        DebugSerial::println("--- TASK STACK USAGE REPORT ---");
+        
+        // Modbus Task Stack Check
+        if (modbusTaskHandle != NULL) {
+            UBaseType_t modbusStackRemaining = uxTaskGetStackHighWaterMark(modbusTaskHandle);
+            DebugSerial::printf("Modbus Task Stack Remaining: %u bytes\n", modbusStackRemaining);
+        }
+        
+        // Firmware Check Task Stack Check
+        if (checkFirmwareTaskHandle != NULL) {
+            UBaseType_t firmwareStackRemaining = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
+            DebugSerial::printf("Firmware Check Task Stack Remaining: %u bytes\n", firmwareStackRemaining);
+        }
+        
+        // NTP Sync Task Stack Check
+        if (syncNTPTaskHandle != NULL) {
+            UBaseType_t ntpStackRemaining = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
+            DebugSerial::printf("NTP Sync Task Stack Remaining: %u bytes\n", ntpStackRemaining);
+        }
+        
+        // Overall system memory info
+        DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
+        
+        vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
+    }
+}
+
+
 void setup()
 {
     // Initialize Serial Monitor for debugging
@@ -164,9 +200,10 @@ void setup()
     }
 
     // Create tasks
-    xTaskCreate(modbusTask, "ModbusTask", 4096, NULL, 1, NULL);
-    xTaskCreate(checkFirmwareTask, "CheckFirmwareTask", 4096, NULL, 1, NULL);
-    xTaskCreate(syncNTPTask, "syncNTPTask", 7168, NULL, 1, NULL);
+    xTaskCreate(modbusTask, "ModbusTask", 4096, NULL, 1, &modbusTaskHandle);
+    xTaskCreate(checkFirmwareTask, "CheckFirmwareTask", 8192, NULL, 1, &checkFirmwareTaskHandle);
+    xTaskCreate(syncNTPTask, "syncNTPTask", 4096, NULL, 1, &syncNTPTaskHandle);
+    xTaskCreate(stackMonitorTask, "StackMonitorTask", 4096, NULL, 1, NULL);
 }
 
 void loop()
