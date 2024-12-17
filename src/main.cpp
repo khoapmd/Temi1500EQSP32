@@ -98,7 +98,7 @@ void checkFirmwareTask(void *pvParameters)
     {
         if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
         {
-            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
+            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() != "0.0.0.0")
             {
                 DebugSerial::println("Checking for firmware updates...");
                 OTACheck(true); // Call OTAHelper function to check for updates
@@ -116,7 +116,7 @@ void syncNTPTask(void *pvParameters)
     {
         if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
         {
-            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
+            if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() != "0.0.0.0")
             {
                syncNTP();        
             }
@@ -148,12 +148,13 @@ void setup()
 
     startWatchDog(); // Start watch dog, if cannot connect to the wifi, esp will restart after 60 secs
     // setup_wifi(); //Handled by EQSP32
-    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED)
+    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() == "0.0.0.0")
     {
         delay(500);
         DebugSerial::print(".");
     }
     setup_mqtt();
+    checkDeviceExist();
 
     // Create a semaphore
     xSemaphore = xSemaphoreCreateBinary();
