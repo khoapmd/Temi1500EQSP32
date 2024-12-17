@@ -122,7 +122,7 @@ void syncNTPTask(void *pvParameters)
         {
             if (eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() != "0.0.0.0")
             {
-               syncNTP();        
+                syncNTP();
             }
             xSemaphoreGive(xSemaphore); // Release the semaphore
         }
@@ -130,37 +130,27 @@ void syncNTPTask(void *pvParameters)
     }
 }
 
-void stackMonitorTask(void *pvParameters) 
+void stackMonitorTask(void *pvParameters)
 {
-    while (1) 
+    while (1)
     {
         DebugSerial::println("--- TASK STACK USAGE REPORT ---");
-        
-        // Modbus Task Stack Check
-        if (modbusTaskHandle != NULL) {
-            UBaseType_t modbusStackRemaining = uxTaskGetStackHighWaterMark(modbusTaskHandle);
-            DebugSerial::printf("Modbus Task Stack Remaining: %u bytes\n", modbusStackRemaining);
-        }
-        
-        // Firmware Check Task Stack Check
-        if (checkFirmwareTaskHandle != NULL) {
-            UBaseType_t firmwareStackRemaining = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
-            DebugSerial::printf("Firmware Check Task Stack Remaining: %u bytes\n", firmwareStackRemaining);
-        }
-        
-        // NTP Sync Task Stack Check
-        if (syncNTPTaskHandle != NULL) {
-            UBaseType_t ntpStackRemaining = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
-            DebugSerial::printf("NTP Sync Task Stack Remaining: %u bytes\n", ntpStackRemaining);
-        }
-        
+
+        if (modbusTaskHandle != NULL)
+            DebugSerial::printf("Modbus Task: %u bytes\n", uxTaskGetStackHighWaterMark(modbusTaskHandle));
+
+        if (checkFirmwareTaskHandle != NULL)
+            DebugSerial::printf("Firmware Task: %u bytes\n", uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle));
+
+        if (syncNTPTaskHandle != NULL)
+            DebugSerial::printf("NTP Task: %u bytes\n", uxTaskGetStackHighWaterMark(syncNTPTaskHandle));
+
         // Overall system memory info
         DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
-        
+
         vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
     }
 }
-
 
 void setup()
 {
