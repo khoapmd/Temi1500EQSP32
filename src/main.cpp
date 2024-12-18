@@ -183,7 +183,7 @@ void setup()
 
     startWatchDog(); // Start watch dog, if cannot connect to the wifi, esp will restart after 60 secs
     // setup_wifi(); //Handled by EQSP32
-    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() == "0.0.0.0")
+    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED || WiFi.localIP().toString() == "0.0.0.0")
     {
         delay(500);
         DebugSerial::print(".");
