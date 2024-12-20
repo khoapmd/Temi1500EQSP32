@@ -25,9 +25,9 @@ build_flags =
 	-L.pio\libdeps\esp32-s3-devkitc-1\EQSP32 -lEQSP32
 	-DCONFIG_FREERTOS_USE_TRACE_FACILITY
     -DCONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
-	'-DAPPVERSION="1.0.0"'
+	'-DAPPVERSION="1.0"'
 	'-DAPPSCREENSIZE="0"'
-	'-DAPPUPDNAME="temi1500ESP32"'
+	'-DAPPUPDNAME="temi1500Chamber"'
 	'-DAPPENCKEY="your-encrypt-key"'
 	'-DAPPDEVTYPE="device-name"'
 	'-DAPPAPIKEY="your-api-key"'
