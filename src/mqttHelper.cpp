@@ -2,7 +2,7 @@
 #include <ArduinoJson.h>
 #include "main.h"
 
-#define MQTT_MAX_PACKET_SIZE 512
+#define MQTT_MAX_PACKET_SIZE 512 // NOTE: Have to edit the PubSubClient.h file, it rewrites the sketch
 extern EQSP32 eqsp32;
 
 extern TaskStackUsage stackUsageData;
@@ -42,6 +42,7 @@ void reconnect()
   willJsonDoc["appDevType"] = APPDEVTYPE;
 
   String willMessageStr;
+  willJsonDoc.shrinkToFit();
   serializeJson(willJsonDoc, willMessageStr);
   const char *willMessage = willMessageStr.c_str();
 
@@ -75,6 +76,7 @@ void reconnect()
       connectJsonDoc["appDevType"] = APPDEVTYPE;
 
       char dataToSend[256];
+      connectJsonDoc.shrinkToFit();
       serializeJson(connectJsonDoc, dataToSend, sizeof(dataToSend));
 
       mqttClient.publish(fullTopic.c_str(), dataToSend, true);
@@ -131,20 +133,25 @@ void callback(char *topic, byte *payload, unsigned int length)
       statusJsonDoc["appScreenSize"] = APPSCREENSIZE;
       statusJsonDoc["appUpdName"] = APPUPDNAME;
       statusJsonDoc["appDevType"] = APPDEVTYPE;
-      // // Add stack usage data
-      // JsonObject stackUsage = statusJsonDoc["stackUsage"].to<JsonObject>();
-      // stackUsage["modbusTask"] = stackUsageData.modbusTaskStack;
-      // stackUsage["firmwareTask"] = stackUsageData.firmwareTaskStack;
-      // stackUsage["ntpTask"] = stackUsageData.ntpTaskStack;
+      // Add stack usage data
+      JsonObject stackUsage = statusJsonDoc["stackUsage"].to<JsonObject>();
+      stackUsage["modbusTask"] = stackUsageData.modbusTaskStack;
+      stackUsage["firmwareTask"] = stackUsageData.firmwareTaskStack;
+      stackUsage["ntpTask"] = stackUsageData.ntpTaskStack;
+      statusJsonDoc["freeHeap"] = ESP.getFreeHeap();
 
-      // // Add free heap
-      // statusJsonDoc["freeHeap"] = ESP.getFreeHeap();
-
-      char dataToSend[256];
-      serializeJson(statusJsonDoc, dataToSend, sizeof(dataToSend));
+      char dataToSend[512];
+      statusJsonDoc.shrinkToFit();
+      serializeJson(statusJsonDoc, dataToSend);
 
       // Publish the data
-      mqttClient.publish(String(APPPMQTTCMDTOPIC).c_str(), dataToSend);
+      bool publishResult = mqttClient.publish(String(APPPMQTTCMDTOPIC).c_str(), dataToSend);
+  
+      if (!publishResult) {
+        DebugSerial::println("MQTT Publish Failed!");
+        DebugSerial::println("MQTT Client State: ");
+        DebugSerial::println(mqttClient.state());
+      }
 
       // Print the data to debug serial
       DebugSerial::println(dataToSend);
@@ -183,6 +190,7 @@ void sendDataMQTT(const ChamberData &data)
   dataJsonDoc["nowSTS"] = data.nowSTS;
 
   char dataToSend[256];
+  dataJsonDoc.shrinkToFit();
   serializeJson(dataJsonDoc, dataToSend, sizeof(dataToSend));
 
   mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);

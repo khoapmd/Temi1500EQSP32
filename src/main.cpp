@@ -135,27 +135,29 @@ void stackMonitorTask(void *pvParameters)
 {
     while (1)
     {
-        DebugSerial::println("--- TASK STACK USAGE REPORT ---");
+        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
+        {
+            DebugSerial::println("--- TASK STACK USAGE REPORT ---");
 
-        // Collect stack usage data
-        if (modbusTaskHandle != NULL) {
-            stackUsageData.modbusTaskStack = uxTaskGetStackHighWaterMark(modbusTaskHandle);
-            DebugSerial::printf("Modbus Task: %u bytes\n", stackUsageData.modbusTaskStack);
+            // Collect stack usage data
+            if (modbusTaskHandle != NULL) {
+                stackUsageData.modbusTaskStack = uxTaskGetStackHighWaterMark(modbusTaskHandle);
+                DebugSerial::printf("Modbus Task: %u bytes\n", stackUsageData.modbusTaskStack);
+            }
+
+            if (checkFirmwareTaskHandle != NULL) {
+                stackUsageData.firmwareTaskStack = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
+                DebugSerial::printf("Firmware Task: %u bytes\n", stackUsageData.firmwareTaskStack);
+            }
+
+            if (syncNTPTaskHandle != NULL) {
+                stackUsageData.ntpTaskStack = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
+                DebugSerial::printf("NTP Task: %u bytes\n", stackUsageData.ntpTaskStack);
+            }
+
+            // Overall system memory info
+            DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
         }
-
-        if (checkFirmwareTaskHandle != NULL) {
-            stackUsageData.firmwareTaskStack = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
-            DebugSerial::printf("Firmware Task: %u bytes\n", stackUsageData.firmwareTaskStack);
-        }
-
-        if (syncNTPTaskHandle != NULL) {
-            stackUsageData.ntpTaskStack = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
-            DebugSerial::printf("NTP Task: %u bytes\n", stackUsageData.ntpTaskStack);
-        }
-
-        // Overall system memory info
-        DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
-
         vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
     }
 }
@@ -183,7 +185,7 @@ void setup()
 
     startWatchDog(); // Start watch dog, if cannot connect to the wifi, esp will restart after 60 secs
     // setup_wifi(); //Handled by EQSP32
-    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED && WiFi.localIP().toString() == "0.0.0.0")
+    while (!eqsp32.getWiFiStatus() == EQ_WF_CONNECTED || WiFi.localIP().toString() == "0.0.0.0")
     {
         delay(500);
         DebugSerial::print(".");
