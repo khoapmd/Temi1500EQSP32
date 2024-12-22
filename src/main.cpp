@@ -131,33 +131,35 @@ void syncNTPTask(void *pvParameters)
     }
 }
 
-void stackMonitorTask(void *pvParameters)
+void stackMonitorTask(void *pvParameters) //DO NOT USE xSemaphore here, it will cause deadlock
 {
     while (1)
     {
-        if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
+
+        DebugSerial::println("--- TASK STACK USAGE REPORT ---");
+
+        // Collect stack usage data
+        if (modbusTaskHandle != NULL)
         {
-            DebugSerial::println("--- TASK STACK USAGE REPORT ---");
-
-            // Collect stack usage data
-            if (modbusTaskHandle != NULL) {
-                stackUsageData.modbusTaskStack = uxTaskGetStackHighWaterMark(modbusTaskHandle);
-                DebugSerial::printf("Modbus Task: %u bytes\n", stackUsageData.modbusTaskStack);
-            }
-
-            if (checkFirmwareTaskHandle != NULL) {
-                stackUsageData.firmwareTaskStack = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
-                DebugSerial::printf("Firmware Task: %u bytes\n", stackUsageData.firmwareTaskStack);
-            }
-
-            if (syncNTPTaskHandle != NULL) {
-                stackUsageData.ntpTaskStack = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
-                DebugSerial::printf("NTP Task: %u bytes\n", stackUsageData.ntpTaskStack);
-            }
-
-            // Overall system memory info
-            DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
+            stackUsageData.modbusTaskStack = uxTaskGetStackHighWaterMark(modbusTaskHandle);
+            DebugSerial::printf("Modbus Task: %u bytes\n", stackUsageData.modbusTaskStack);
         }
+
+        if (checkFirmwareTaskHandle != NULL)
+        {
+            stackUsageData.firmwareTaskStack = uxTaskGetStackHighWaterMark(checkFirmwareTaskHandle);
+            DebugSerial::printf("Firmware Task: %u bytes\n", stackUsageData.firmwareTaskStack);
+        }
+
+        if (syncNTPTaskHandle != NULL)
+        {
+            stackUsageData.ntpTaskStack = uxTaskGetStackHighWaterMark(syncNTPTaskHandle);
+            DebugSerial::printf("NTP Task: %u bytes\n", stackUsageData.ntpTaskStack);
+        }
+
+        // Overall system memory info
+        DebugSerial::printf("Free Heap: %u bytes\n", ESP.getFreeHeap());
+
         vTaskDelay(pdMS_TO_TICKS(60000)); // Check every minute
     }
 }
@@ -167,7 +169,7 @@ void setup()
     // Initialize Serial Monitor for debugging
     Serial.begin(115200);
     snprintf(boardID, 23, "%llX", ESP.getEfuseMac()); // Get unique ESP MAC
-    
+
     // Initialize EQSP32
     EQSP32Configs configs;
     configs.devSystemID = boardID;
