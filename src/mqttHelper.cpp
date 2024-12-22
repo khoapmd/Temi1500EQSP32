@@ -21,6 +21,9 @@ unsigned long lastMsg = 0;
 int value = 0;
 
 extern char boardID[23];
+String cmdTopic = String(APPPMQTTCMDTOPIC);
+String dataTopic = String(APPPMQTTDATATOPIC);
+String statusTopic = String(APPPMQTTSTSTOPIC);
 
 void reconnect()
 {
@@ -46,8 +49,6 @@ void reconnect()
   serializeJson(willJsonDoc, willMessageStr);
   const char *willMessage = willMessageStr.c_str();
 
-  String fullTopic = String(APPPMQTTSTSTOPIC) + "/" + boardID;
-
   // Loop until we're reconnected to the MQTT broker
   while (!mqttClient.connected())
   {
@@ -57,7 +58,7 @@ void reconnect()
     if (mqttClient.connect(boardID,           // Client ID
                            mqtt_user,         // Username
                            mqtt_pass,         // Password
-                           fullTopic.c_str(), // Will Topic
+                           statusTopic.c_str(), // Will Topic
                            2,                 // Will QoS
                            true,              // Will Retain
                            willMessage,       // Will Message
@@ -79,10 +80,11 @@ void reconnect()
       connectJsonDoc.shrinkToFit();
       serializeJson(connectJsonDoc, dataToSend, sizeof(dataToSend));
 
-      mqttClient.publish(fullTopic.c_str(), dataToSend, true);
+      mqttClient.publish(statusTopic.c_str(), dataToSend, true);
 
       // Subscribe to command topics
-      mqttClient.subscribe((String(APPPMQTTCMDTOPIC) + "/#").c_str());
+      mqttClient.subscribe(cmdTopic.c_str());
+      mqttClient.subscribe((cmdTopic + "/" + boardID).c_str());
     }
     else
     {
@@ -106,8 +108,7 @@ void callback(char *topic, byte *payload, unsigned int length)
   DebugSerial::println("Incoming: " + String(topic) + " - " + payloadStr);
 
   // Check if the message is for this specific board or a global command
-  if (String(topic) == String(APPPMQTTCMDTOPIC) ||
-      String(topic) == String(APPPMQTTCMDTOPIC) + "/" + String(boardID))
+  if (String(topic) == cmdTopic || String(topic) == (cmdTopic + "/" + boardID))
   {
     // Check if the message is "RESTART"
     if (payloadStr == "RESTART")
@@ -145,7 +146,7 @@ void callback(char *topic, byte *payload, unsigned int length)
       serializeJson(statusJsonDoc, dataToSend);
 
       // Publish the data
-      bool publishResult = mqttClient.publish(String(APPPMQTTCMDTOPIC).c_str(), dataToSend);
+      bool publishResult = mqttClient.publish((cmdTopic + "/" + boardID).c_str(), dataToSend);
   
       if (!publishResult) {
         DebugSerial::println("MQTT Publish Failed!");
@@ -193,6 +194,6 @@ void sendDataMQTT(const ChamberData &data)
   dataJsonDoc.shrinkToFit();
   serializeJson(dataJsonDoc, dataToSend, sizeof(dataToSend));
 
-  mqttClient.publish(String(APPPMQTTDATATOPIC).c_str(), dataToSend);
+  mqttClient.publish(dataTopic.c_str(), dataToSend);
   DebugSerial::println(dataToSend);
 }
