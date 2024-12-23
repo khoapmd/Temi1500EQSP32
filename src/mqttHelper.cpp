@@ -2,7 +2,7 @@
 #include <ArduinoJson.h>
 #include "main.h"
 
-#define MQTT_MAX_PACKET_SIZE 512 // NOTE: Have to edit the PubSubClient.h file, it rewrites the sketch
+#define MQTT_MAX_PACKET_SIZE 1024 // NOTE: Have to edit the PubSubClient.h file, it rewrites the sketch
 extern EQSP32 eqsp32;
 
 extern TaskStackUsage stackUsageData;
